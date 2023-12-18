@@ -3,6 +3,9 @@ version: '3.6'
 networks:
   elk:
     driver: bridge
+  kafkanet: # connection to kafka
+    name: kafkanet
+    driver: bridge
 
 services:
 
@@ -10,7 +13,7 @@ services:
   zookeeper:
     image: 'zookeeper:latest'
     ports:
-      - "2181:2181"
+      - "2182:2181"
     environment:
       ALLOW_ANONYMOUS_LOGIN: 1
 
@@ -19,10 +22,11 @@ services:
     ports:
       - "9092:9092"
     environment:
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9002
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
       KAFKA_ADVERTISED_HOSTNAME: localhost
       ALLOW_PLAINTEXT_LISTENER: 1
+    
 
   kafka_manager:
     image: hlebalbau/kafka-manager:stable
@@ -35,15 +39,35 @@ services:
   # Influx DB Server
   influxdb:
     image: influxdb:latest
-    ports:
-      - "8086:8086"
+    container_name: influxdb
+    restart: always
     environment:
-      INFLUXDB_DB: telegraf
-      INFLUXDB_ADMIN_USER: admin
-      INFLUXDB_ADMIN_PASSWORD: password
-      INFLUXDB_USER: telegraf
-      INFLUXDB_USER_PASSWORD: password
-# Framework for data visualization
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=data_hunters  # Replace with your desired admin username
+      - DOCKER_INFLUXDB_INIT_PASSWORD=OST22/23  # Replace with your desired admin password
+      - DOCKER_INFLUXDB_INIT_ORG=OST         # Replace with your desired organization name
+      - DOCKER_INFLUXDB_INIT_BUCKET=Epsymolo1 # Replace with your desired bucket name
+      - DOCKER_INFLUXDB_INIT_RETENTION=1w    # Optional: default retention policy, e.g., '1w' for one week
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=xbIid7UWy0A6C4cG60E3BHbg-ryf3ZPrfsAFk6g1m6Sg_rL7oS-CropQJ9y2rRwVc7LX25MO0dkeRwAwlIphAg==  # Replace with your desired token
+    ports:
+      - '8086:8086'
+
+
+      
+  telegraf:
+    image: telegraf
+    container_name: telegraf
+    restart: always
+    volumes:
+      - ./telegraf.conf:/etc/telegraf/telegraf.conf:ro
+    depends_on:
+      - influxdb
+    links:
+      - influxdb
+    ports:
+      - '8125:8125'
+
+  # Framework for data visualization
   grafana:
     image: grafana/grafana
     container_name: grafana-server
@@ -53,17 +77,19 @@ services:
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_INSTALL_PLUGINS=
+       - GF_INSTALL_PLUGINS=
     links:
       - influxdb
     ports:
       - '3000:3000'
+    volumes:
+      - grafana_data:/var/lib/grafana
     
   #Framework for Spark
   spark-master:
     image: bitnami/spark:latest
     ports:
-      - '8080:8080'
+      - '8081:8080'
     environment:
       - SPARK_MODE=master
       - SPARK_RPC_AUTHENTICATION_ENABLED=no
@@ -81,5 +107,5 @@ services:
 
     
 volumes:
-  influxdb:
-  grafana:
+  grafana_data: {}
+  influxdb_data: {}
