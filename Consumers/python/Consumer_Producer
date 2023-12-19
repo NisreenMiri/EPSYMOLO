@@ -1,16 +1,28 @@
 from confluent_kafka import Consumer, KafkaError, Producer
 import json
 from time import sleep
+import numpy as np
+from collections import defaultdict
+from CountMin import *
+from FlajoletMartin import *
+from Kmeans import *
 
+# Global variables
 consumer = None
 counter = 0
 num_data = 0
+bootstrap_servers = 'kafka:9092'
+input_topic = 'Epsymolo'
+output_topic = 'Epsymolo1'
 
+
+# Kafka Consumer and Producer functions
 def create_consumer(bootstrap_servers, topic, timeout=10.0):
     conf = {
         'bootstrap.servers': bootstrap_servers,
         'group.id': 'kafka_python_consumer',
-        'auto.offset.reset': 'earliest'}
+        'auto.offset.reset': 'earliest'
+    }
     consumer = Consumer(conf)
     consumer.subscribe([topic])
     return consumer
@@ -19,25 +31,22 @@ def create_producer(bootstrap_servers):
     producer = Producer({'bootstrap.servers': bootstrap_servers})
     return producer
 
+# Message processing functions
 def consume_write(message_value):
     global num_data
     num_data += 1
     print(num_data, message_value)
 
 def produce_to_kafka(message_value, results):
-      # Add the modules results to the message
+      # Add the results to the message
     for key, value in results.items():
         message_value[key] = value
+
     # Send the modified message to the Kafka producer
     producer.produce(topic=output_topic, value=json.dumps(message_value).encode('utf-8'))
 
 
-# Replace with your Kafka bootstrap servers
-bootstrap_servers = 'kafka:9092'
-# Replace with your actual topics
-input_topic = 'Epsymolo'
-output_topic = 'Epsymolo1'
-
+# Main logic
 while counter < 10 and consumer is None:
     try:
         print('Trying to connect to Kafka...')
@@ -51,10 +60,10 @@ if consumer is not None:
     print('Kafka is up.')
     producer = create_producer(bootstrap_servers)
     print('Printing messages on topic Epsymolo1...')
-    
+
     try:
         while True:
-            timeout=1.0
+            timeout = 1.0
             msg = consumer.poll(timeout)  # Poll for messages
             if msg is None:
                 timeout -= 1.0
@@ -73,30 +82,30 @@ if consumer is not None:
             else:
                 timeout = 10.0
                 # Proper message
-                   message_value = json.loads(msg.value().decode('utf-8'))
+                message_value = json.loads(msg.value().decode('utf-8'))
+            
                 consume_write(message_value)
+                
                 # Aggregate results from different functions
                 results = {
-                #this is the first module that I created
                 'flajolet_martin': flajolet_martin(message_value),
-                # here ypu can add yours
-                #'result2': module2(message_value),
-                #'result3': module3(message_value),
-                #'result4': module4(message_value)
+                'Count_Min':count_min(message_value),
+                'Cluster': clustering(message_value)
+                
             }
-                # Send the modules results to the output topic
+
+                # Send the aggregated results to the output topic
                 produce_to_kafka(message_value, results)
                 # print(f"Received message: {msg.value().decode('utf-8')}")
-
 
     finally:
         consumer.close()
         producer.flush()
-        #producer.close()
+        # producer.close()
         print("Consumer and producer closed.")
         print('-----')
 
     print('Consumer process successfully ended.')
 
 else:
-    print('Consumer cannot be initialized. Exiting.'
+    print('Consumer cannot be initialized. Exiting.')
